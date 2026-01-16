@@ -46,3 +46,40 @@ def session_info(req: SessionRequest) -> Dict[str, Any]:
     "session_name": getattr(session, "name", None),
     "drivers": drivers
   }
+
+
+@app.post("/session/laps")
+def session_laps(req: SessionRequest, driver: Optional[str] = None) -> Dict[str, Any]:
+  """
+  Returns lap table (optionally filtered by driver) in JSON.
+  Note: returning *all* laps can be large; consider paging/filters.
+  """
+  try:
+    session = fastf1.get_session(req.year, req.gp, req.session)
+    session.load(laps=True, telemetry=False, weather=False, messages=False)
+    laps = session.laps
+
+    if driver:
+      laps = laps.pick_driver(driver)
+
+    cols = [c for c in [
+      "Driver", "LapNumber", "Stint", "Compound", "TyreLife",
+      "LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
+      "SpeedI1", "SpeedI2", "SpeedFL", "SpeedST",
+      "IsPersonalBest", "Deleted", "TrackStatus"
+    ] if c in laps.columns]
+
+    df = laps[cols].copy()
+
+    for c in df.columns:
+      if pd.api.types.is_timedelta64_dtype(df[c]):
+        df[c] = df[c].dt.total_seconds().mul(1000).round().astype("Int64")
+
+    records = df.where(pd.notnull(df), None).to_dict(orient="records")
+
+    return { "count": len(records), "data": records }
+
+  except Exception as e:
+    raise HTTPException(status_code=400, detail=f"FastF1 error: {e}")
+  
+
