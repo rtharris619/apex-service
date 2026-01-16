@@ -1,0 +1,1 @@
+pip install fastapi uvicorn fastf1 pandas numpy
